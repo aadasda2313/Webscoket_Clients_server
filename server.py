@@ -9,7 +9,7 @@ ADMIN_PASSWORD = "1234"
 
 array_busy = []
 array_free = []
-
+connected_clients = {}
 
 
 async def check_admin():
@@ -22,48 +22,57 @@ async def admin_handler():
 
 
 
-
+async def send_to_client(ip, message):
+    websocket = connected_clients.get(ip)
+    if websocket:
+        try:
+            await websocket.send(message)
+            print(f"Sent to {ip}: {message}")
+        except Exception as e:
+            print(f"Failed to send to {ip}: {e}")
+    else:
+        print(f"No client with IP {ip} connected.")
+        
+        
+        
 
 async def handler(websocket):
-    connected.add(websocket)
+    ip = websocket.remote_address[0]
+    connected_clients[ip] = websocket
+
+
     
-    is_admin = False
+
 
     try:
         async for msg in websocket:
-            #print(f" Received: {msg}")
-            #data = json.loads(msg)
-            print(msg)
-            print(f" From: {websocket.remote_address}")
-            #await websocket.send(f"Echo from server: {msg}")
-            response = '{"btn1": true,"btn2": true,"btn3":false,"btn4":true,"btn5":true,"drive_to":10, "age": 30, "city": "New York"}'
-            await websocket.send(response)
-            print(websocket)
-
-        ''' if msg.startswith("LOGIN"):
-                parts = msg.strip().split()
-                print(parts)
-                print(len(parts))
-                if len(parts) == 3:
-                    username, password = parts[1], parts[2]
-                    if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-                        is_admin = True
-                        await websocket.send("LOGIN_SUCCESS")
-                        print(" Admin logged in.")
-                    else:
-                        await websocket.send("LOGIN_FAILED")
-                        print(" Invalid login.")
-                else:
-                    await websocket.send("LOGIN_USAGE: LOGIN <username> <password>")'''
-           # else:
-                # Normal echo message
-            #await websocket.send(f"Echo from server: {msg}")
+            print(f"Received from {ip}: {msg}")
+            response_user_client = '{"btn1": true, "btn2": true, "btn3": false, "btn4": false, "btn5": false, "drive_to": 10}'
+            response_esp32 = '{"cmd": move_to, "distance": x}'
+            await websocket.send(response_user_client)
+            if "START" in msg:
+                print("instart")
                 
-
+            else:
+                #print("intelse")
+                data = json.loads(msg)
+                print(data)
+                btn_id = data.get("button_id")
+                if "move_to" in msg:
+                    move = data["move_to"]
+                    await send_to_client(button_id, response_esp32.replace("x",move))
+                    
+                    pass
+                else:
+                    await websocket.send('{"error": "no_distance"}')
+            
+            
+            
+            
     except websockets.ConnectionClosed:
-        print(f" Disconnected: {websocket.remote_address}")
+        print(f"Disconnected: {ip}")
     finally:
-        connected.discard(websocket)
+        connected_clients.pop(ip, None)
 
 async def main():
     async with websockets.serve(handler, "192.168.2.100", 6789):
@@ -71,3 +80,4 @@ async def main():
         await asyncio.Future()  # keep running
 
 asyncio.run(main())
+
